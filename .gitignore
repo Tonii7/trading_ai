@@ -1,0 +1,47 @@
+# Environment files
+.env
+.env.*
+!env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+.venv/
+
+# Logs
+logs/
+*.log
+
+# Knowledge base index
+kb_index/
+
+# Model files
+*.bin
+*.pt
+*.onnx
+
+# Datasets & exports
+data/
+*.csv
+*.xlsx
+*.json
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Streamlit
+.streamlit/
+
+# CrewAI generated files
+**/.crew/
+crew.json

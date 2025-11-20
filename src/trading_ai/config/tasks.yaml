@@ -1,0 +1,75 @@
+tasks:
+  analyze_market:
+    description: >
+      Analyze current market conditions for XAUUSD, US30, and SPX500.
+      Detect trends, volatility levels, support and resistance zones,
+      and identify short-term versus medium-term momentum shifts.
+    expected_output: >
+      A structured report outlining the current bias (bullish/bearish/neutral),
+      with suggested trading levels and a short rationale per instrument.
+    agent: market_analyzer
+
+  screen_news:
+    description: >
+      Collect and summarize major financial news impacting risk assets, inflation,
+      and interest rates. Classify each piece by its likely market impact.
+    expected_output: >
+      A list of key headlines with short notes on their expected effect:
+      Bullish / Bearish / Neutral sentiment and related asset categories.
+    agent: news_screener
+
+  macro_assessment:
+    description: >
+      Retrieve the latest FRED data and compute core macroeconomic metrics:
+      CPI, unemployment rate, real yields, yield curve spread, and recession probability.
+      Summarize the macro regime (risk-on/risk-off).
+    expected_output: >
+      A concise macro overview describing inflation dynamics, rate conditions,
+      liquidity trends, and the implied risk appetite regime.
+    agent: fred_macro_agent
+
+  build_strategy:
+    description: >
+      Combine results from market, news, and macro tasks to build
+      a clear trading strategy (e.g., range breakout or trend-following),
+      specifying entry/exit conditions and key filters.
+    expected_output: >
+      A detailed trading plan with logic explanation, timeframes, stop-loss,
+      take-profit, and position-sizing logic.
+    agent: strategy_builder
+
+  generate_signals:
+    description: >
+      Convert the trading strategy into real actionable trade signals.
+      Each signal must specify asset, direction, entry, stop, and target.
+    expected_output: >
+      Structured list of signals: ticker, bias, entry, stop-loss, take-profit,
+      rationale, and confidence score.
+    agent: signal_generator
+
+  run_backtest:
+    description: >
+      Execute a historical backtest of the latest strategy to validate performance
+      across multiple market phases. Calculate Sharpe, max drawdown, and temporal edge.
+    expected_output: >
+      A backtest report including performance metrics, volatility clusters,
+      and best/worst periods for execution.
+    agent: backtester_agent
+
+  portfolio_review:
+    description: >
+      Review the combined strategy portfolio for overall balance, correlations,
+      and risk exposure. Evaluate risk-adjusted return and portfolio allocation.
+    expected_output: >
+      Portfolio-level summary with recommendations on exposure rebalancing,
+      hedging opportunities, and capital allocation optimization.
+    agent: cfa_portfolio_manager
+
+  summarize_day:
+    description: >
+      Collect results from all agents (market, news, macro, strategy, signals, backtest, and portfolio)
+      and compile a final daily report for the dashboard.
+    expected_output: >
+      A final human-readable daily summary integrating all insights and
+      providing actionable conclusions for trading operations.
+    agent: supervisor

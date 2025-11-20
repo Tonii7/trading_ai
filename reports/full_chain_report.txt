@@ -1,0 +1,19 @@
+📑 Backtest report for TEST_CHAIN
+
+=== Asset base performance (buy & hold) ===
+- Total return: -23.25%
+- Annual return: -1.03%
+- Annual volatility: 26.15%
+- Sharpe (approx): -0.04
+
+=== Strategy performance (signals) ===
+- Initial balance: 100000.00
+- Final balance: 101391.45
+- Total return: 1.39%
+- Max drawdown: -44.76%
+
+=== Time patterns ===
+⏱ Time pattern analysis for TEST_CHAIN
+- Best day: Tue (0.14% mean, win 54.2%)
+- Best month: 2 (0.11% mean, win 52.6%)
+- Best hour: 23:00 (0.58% mean, win 59.7%)
