@@ -1,95 +1,114 @@
 """
-ctrader_openapi_client.py — минимальный клиент cTrader Open API (OpenApiPy)
----------------------------------------------------------------------------
-✅ Использует официальный пакет: ctrader-open-api
-✅ Делает ApplicationAuth по CLIENT_ID / CLIENT_SECRET
-✅ Подключается к demo или live (по переменной CTRADER_ENV)
-✅ Печатает ВСЕ входящие сообщения, чтобы увидеть, что связь есть
+ctrader_openapi_client.py — асинхронная обёртка над синхронными функциями cTrader Open API.
+
+Идея:
+- market_snapshot.py содержит синхронный код с ctrader_open_api / Twisted.
+- здесь мы оборачиваем его в async-интерфейс, который удобно использовать в агентах.
 """
 
-import os
-from dotenv import load_dotenv
+from typing import Any, Dict, List
+import asyncio
 
-from ctrader_open_api import Client, TcpProtocol, Protobuf, EndPoints
-from ctrader_open_api.messages.OpenApiMessages_pb2 import ProtoOAApplicationAuthReq
-from twisted.internet import reactor
-
-# ─────────────────────────────────────────────
-# 1. Загружаем .env
-# ─────────────────────────────────────────────
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ENV_PATH = os.path.join(BASE_DIR, ".env")
-load_dotenv(ENV_PATH)
-
-CLIENT_ID = os.getenv("CTRADER_CLIENT_ID")
-CLIENT_SECRET = os.getenv("CTRADER_CLIENT_SECRET")
-ENV_MODE = os.getenv("CTRADER_ENV", "demo").lower()  # "demo" или "live"
+try:
+    from trading_ai.services.ctrader import market_snapshot as _snapshot
+    fetch_last_tick = getattr(_snapshot, "fetch_last_tick", None)
+    fetch_candles = getattr(_snapshot, "fetch_candles", None)
+    fetch_symbol_details = getattr(_snapshot, "fetch_symbol_details", None)
+except ImportError:
+    _snapshot = None
+    fetch_last_tick = None
+    fetch_candles = None
+    fetch_symbol_details = None
 
 
-if not CLIENT_ID or not CLIENT_SECRET:
-    raise ValueError("❌ В .env должны быть CTRADER_CLIENT_ID и CTRADER_CLIENT_SECRET")
-
-# ─────────────────────────────────────────────
-# 2. Выбор хоста (demo/live)
-# ─────────────────────────────────────────────
-if ENV_MODE == "live":
-    host = EndPoints.PROTOBUF_LIVE_HOST
-    print("ℹ️ Режим: LIVE")
-else:
-    host = EndPoints.PROTOBUF_DEMO_HOST
-    print("ℹ️ Режим: DEMO")
-
-port = EndPoints.PROTOBUF_PORT
-
-# ─────────────────────────────────────────────
-# 3. Создаём клиента
-# ─────────────────────────────────────────────
-client = Client(host, port, TcpProtocol)
-
-
-def on_error(failure):
-    print("❌ Message Error:", failure)
-
-
-def on_connected(cli):
+class CTraderClient:
     """
-    Коллбек, вызывается при установлении TCP-соединения.
-    Здесь делаем ApplicationAuth.
+    Асинхронный клиент для работы с данными cTrader.
+
+    ВАЖНО:
+    - connect()/disconnect() оставлены для совместимости.
+      Если внутри snapshot-функций уже есть своя логика подключения/отключения,
+      их можно сделать пустыми или использовать как контекст.
     """
-    print(f"✅ Connected to cTrader Open API: {host}:{port}")
 
-    req = ProtoOAApplicationAuthReq()
-    req.clientId = CLIENT_ID
-    req.clientSecret = CLIENT_SECRET
+    def __init__(self) -> None:
+        self.connected: bool = False
 
-    print("📨 Sending ProtoOAApplicationAuthReq ...")
-    d = cli.send(req)
-    d.addErrback(on_error)
+    async def connect(self) -> None:
+        """
+        Если твой код требует явного открытия соединения — перенеси туда логику.
+        Если каждая snapshot-функция сама открывает/закрывает соединение — можно оставить так.
+        """
+        self.connected = True
+
+    async def disconnect(self) -> None:
+        """
+        Аналогично connect(): если нужен явный disconnect — реализуй.
+        """
+        self.connected = False
+
+    async def get_symbol_ticks(self, symbol: str, depth: int = 1) -> List[Dict[str, Any]]:
+        """
+        Асинхронная обёртка над fetch_last_tick().
+        Вызываем синхронный код в отдельном потоке, чтобы не блокировать event loop.
+        """
+        if fetch_last_tick is None:
+            raise RuntimeError("fetch_last_tick не реализован в market_snapshot.py")
+        return await asyncio.to_thread(fetch_last_tick, symbol, depth)
+
+    async def get_symbol_candles(
+        self,
+        symbol: str,
+        timeframe: str = "M1",
+        count: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """
+        Асинхронная обёртка над fetch_candles().
+        """
+        if fetch_candles is None:
+            raise RuntimeError("fetch_candles не реализован в market_snapshot.py")
+        return await asyncio.to_thread(fetch_candles, symbol, timeframe, count)
+
+    async def get_symbol_details(self, symbol: str) -> Dict[str, Any]:
+        """
+        Асинхронная обёртка над fetch_symbol_details().
+        """
+        if fetch_symbol_details is None:
+            raise RuntimeError("fetch_symbol_details не реализован в market_snapshot.py")
+        return await asyncio.to_thread(fetch_symbol_details, symbol)
 
 
-def on_disconnected(cli, reason):
-    print("⚠️ Disconnected:", reason)
-
-
-def on_message(cli, message):
+async def _demo() -> None:
     """
-    Универсальный коллбек — печатает ВСЕ приходящие сообщения.
-    Это нужно, чтобы увидеть ApplicationAuthRes и прочие ответы.
+    Тестовый запуск для:
+
+        python -m trading_ai.services.ctrader.ctrader_openapi_client
     """
-    decoded = Protobuf.extract(message)
-    print("📩 Message received:")
-    print(decoded)
+    client = CTraderClient()
+    await client.connect()
+
+    print("\n=== CTrader OpenAPI Demo ===")
+
+    try:
+        details = await client.get_symbol_details("US30")
+        print("US30 details:", details)
+    except Exception as e:
+        print("Ошибка при получении details:", e)
+
+    try:
+        ticks = await client.get_symbol_ticks("US30", depth=1)
+        print("US30 ticks:", ticks)
+    except Exception as e:
+        print("Ошибка при получении ticks:", e)
+
+    try:
+        candles = await client.get_symbol_candles("US30", "M1", 3)
+        print("US30 candles:", candles)
+    except Exception as e:
+        print("Ошибка при получении candles:", e)
+
+    await client.disconnect()
 
 
-# Вешаем коллбеки
-client.setConnectedCallback(on_connected)
-client.setDisconnectedCallback(on_disconnected)
-client.setMessageReceivedCallback(on_message)
-
-# ─────────────────────────────────────────────
-# 4. Стартуем сервис
-# ─────────────────────────────────────────────
 if __name__ == "__main__":
-    print(f"🔌 Connecting to {host}:{port} (ENV={ENV_MODE}) ...")
-    client.startService()
-    reactor.run()
+    asyncio.run(_demo())

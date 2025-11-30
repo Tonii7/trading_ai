@@ -1,0 +1,30 @@
+routes:
+  system_logs:
+    discord: "system_logs"
+
+  system_status:
+    discord: "system_status"
+
+  engine_logs:
+    discord: "system_logs"
+
+  market_snapshot:
+    discord: "market_analyzer"
+
+  market_candles:
+    discord: "technicals_15m"
+
+  liquidity:
+    discord: "liquidity_maps"
+
+  fred:
+    discord: "fred_liquidity"
+
+  tech15:
+    discord: "technicals_15m"
+
+  full_report:
+    discord: "agents_output"
+
+  errors:
+    discord: "system_logs"

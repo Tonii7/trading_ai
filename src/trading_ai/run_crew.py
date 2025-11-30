@@ -1,144 +1,190 @@
 import os
 import json
 from datetime import datetime
+from pathlib import Path
+from dotenv import load_dotenv
 
-from crewai import Agent, Task, Crew, LLM
+try:
+    from crewai import Agent, Task, Crew, Process, LLM
+except ModuleNotFoundError:
+    class _DummyLLM:
+        def __init__(self, *a, **k): ...
+    class _DummyAgent:
+        def __init__(self, *a, **k): ...
+    class _DummyTask:
+        def __init__(self, *a, **k): ...
+    class _DummyCrew:
+        def __init__(self, *a, **k): ...
+        def kickoff(self, *a, **k):
+            return "CrewAI not available. Install in real environment."
+    class _Process:
+        sequential = "sequential"
+        concurrent = "concurrent"
+    Agent = _DummyAgent
+    Task = _DummyTask
+    Crew = _DummyCrew
+    Process = _Process
+    LLM = _DummyLLM
 
+# -------------------------------------------------
+# Базовые пути и ENV
+# -------------------------------------------------
+try:
+    ROOT = Path(__file__).resolve().parents[2]
+except Exception:
+    ROOT = Path.cwd()
 
-# ============================================================
-# 1. Подключение Llama3 через Ollama
-# ============================================================
+ENV_PATH = ROOT / ".env"
+if ENV_PATH.exists():
+    load_dotenv(ENV_PATH)
 
+LOG_DIR = ROOT / "reports"
+LOG_DIR.mkdir(exist_ok=True)
+
+MODEL = os.getenv("MODEL", "ollama/llama3")
+OLLAMA_API_BASE = os.getenv("OLLAMA_API_BASE", "http://127.0.0.1:11434")
+
+# Реальный рыночный контекст
+from trading_ai.data.market_data import load_realtime_market_context
+
+# -------------------------------------------------
+# Инициализация LLM через LiteLLM + Ollama
+# -------------------------------------------------
 llm = LLM(
-    model="llama3",                         # имя модели в Ollama
-    provider="ollama",                      # провайдер
-    api_base="http://127.0.0.1:11434",      # Ollama API endpoint
+    model=MODEL,
+    provider="ollama",
+    api_base=OLLAMA_API_BASE,
     temperature=0.3,
-    timeout=60,
 )
 
-
-# ============================================================
-# 2. Определяем агентов
-# ============================================================
-
-ny_agent = Agent(
-    name="NY Session Setup Agent",
-    role="Intraday NY session analyst",
+# -------------------------------------------------
+# Агенты
+# -------------------------------------------------
+ny_session_agent = Agent(
+    name="NY Index Session Setup Agent",
+    role="Планировщик торгов по индексам на Нью-Йоркскую сессию",
     goal=(
-        "Generate a structured pre-market trading setup for the upcoming "
-        "New York session for US30 and SP500."
+        "Подготовить структурированный торговый план для NY-сессии по индексам "
+        "(US30, S&P500, NAS100) с учётом новостей, ликвидности и ключевых уровней."
     ),
     backstory=(
-        "You are an experienced NY session day trader. You analyze liquidity, "
-        "overnight ranges, Asia/London structure, key levels and session timing."
+        "Опытный внутридневной трейдер по американским индексам, формализующий сетапы "
+        "в виде чёткого плана: контекст, уровни, сценарии и риски."
     ),
-    llm=llm,
     verbose=True,
+    llm=llm,
 )
 
 research_agent = Agent(
-    name="Research Agent",
-    role="Trading strategy researcher",
+    name="Strategy Research Agent",
+    role="Исследователь торговых стратегий",
     goal=(
-        "Generate 1–2 practical trading ideas that Eldar can use "
-        "for US30/SP500 during today's NY session."
+        "Изучать и предлагать новые/существующие стратегии по индексам, указывать условия "
+        "применения, сильные и слабые стороны."
     ),
     backstory=(
-        "You specialize in trading research, modern price action, institutional concepts "
-        "and volatility filters."
+        "Квант-исследователь, умеющий объяснять сложные идеи простым языком и привязывать "
+        "стратегии к рыночным режимам."
     ),
-    llm=llm,
     verbose=True,
+    llm=llm,
 )
 
-manager_agent = Agent(
-    name="Supervisor",
-    role="Coordinator",
-    goal=(
-        "Combine insights from both agents into one clear, structured, "
-        "actionable briefing for Eldar in Russian language."
-    ),
+coordinator_agent = Agent(
+    name="Session Coordinator Agent",
+    role="Координатор торговой сессии",
+    goal="Свести анализ, идеи и конечный план действий в единый документ для трейдера.",
     backstory=(
-        "You act like a trading floor manager. You summarize, refine and combine outputs "
-        "into a final trading plan."
+        "Профессиональный риск-менеджер, превращающий разрозненные идеи в исполнимый план "
+        "с акцентом на риск-параметры."
     ),
-    llm=llm,
     verbose=True,
+    llm=llm,
 )
 
-
-# ============================================================
-# 3. Определяем задачи
-# ============================================================
-
-ny_task = Task(
+# -------------------------------------------------
+# Задачи
+# -------------------------------------------------
+ny_context_task = Task(
+    name="NY market context",
     description=(
-        "Provide a detailed NY session pre-market setup for US30 and SP500. "
-        "Include: current bias, overnight high/low, Asia/London structure, "
-        "liquidity pools, key levels, scenario A/B and invalidation."
+        "Собери краткий контекст по рынку перед открытием NY-сессии:"
+        "\n- общая картина по US индексам (US30, S&P500, NASDAQ)"
+        "\n- важные движения Азии и Европы"
+        "\n- ключевые новости (макро, FOMC, earnings)"
+        "\n- признаки risk-on / risk-off"
     ),
-    expected_output="Structured markdown trading plan.",
-    agent=ny_agent,
+    expected_output="Краткий структурированный контекст NY-сессии",
+    agent=ny_session_agent,
 )
 
-research_task = Task(
+strategy_research_task = Task(
+    name="Strategy ideas for today",
     description=(
-        "Provide 1–2 short, practical ideas for intraday NY session trading today. "
-        "Focus on timing, volatility windows, liquidity grabs and risk filters."
+        "Предложи 2–3 стратегии для NY-сессии. Для каждой укажи:"
+        "\n- тип (пробой, возврат, ротация, импульс)"
+        "\n- идею входа"
+        "\n- таймфреймы"
+        "\n- риск-параметры"
     ),
-    expected_output="Bullet list with explanation.",
+    expected_output="2–3 стратегии с триггерами и рисками",
     agent=research_agent,
 )
 
-manager_task = Task(
+final_plan_task = Task(
+    name="NY session final plan",
     description=(
-        "Combine outputs of NY Setup and Research Agent. Create final NY session briefing "
-        "for Eldar, in Russian, concise, suitable for Telegram."
+        "Подготовь финальный план NY-сессии:"
+        "\n1. Контекст"
+        "\n2. Ключевые уровни US30/S&P/NASDAQ"
+        "\n3. Сценарии bull/bear/range"
+        "\n4. Риск-рамки"
+        "\n5. Чек-лист"
     ),
-    expected_output="Final Russian briefing.",
-    agent=manager_agent,
+    expected_output="Финальный план NY session",
+    agent=coordinator_agent,
 )
 
-
-# ============================================================
-# 4. Crew (Команда агентов)
-# ============================================================
-
 crew = Crew(
-    agents=[ny_agent, research_agent, manager_agent],
-    tasks=[ny_task, research_task, manager_task],
+    agents=[ny_session_agent, research_agent, coordinator_agent],
+    tasks=[ny_context_task, strategy_research_task, final_plan_task],
+    process=Process.sequential,
     verbose=True,
 )
 
-
-# ============================================================
-# 5. Логирование результатов
-# ============================================================
-
-LOG_DIR = "logs"
-LOG_FILE = os.path.join(LOG_DIR, "ny_session_setups.jsonl")
-
-os.makedirs(LOG_DIR, exist_ok=True)
-
-
-def save_log(result_text: str):
+# -------------------------------------------------
+# Логирование
+# -------------------------------------------------
+def save_log(result_text: str) -> None:
+    log_file = LOG_DIR / "ny_session_crew_log.jsonl"
     entry = {
         "timestamp": datetime.utcnow().isoformat(),
+        "model": MODEL,
+        "ollama_api_base": OLLAMA_API_BASE,
         "result": result_text,
     }
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
+    with log_file.open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
-# ============================================================
-# 6. Запуск
-# ============================================================
-
+# -------------------------------------------------
+# Точка входа
+# -------------------------------------------------
 if __name__ == "__main__":
-    result = crew.run()
+    print("\n[TradingAI] Запуск NY Session Crew...\n")
+    print(f"ROOT: {ROOT}")
+    print(f"Используем модель: {MODEL}")
+    print(f"Ollama endpoint: {OLLAMA_API_BASE}\n")
 
-    print("\n========== FINAL NY SESSION BRIEFING ==========\n")
+    # 1) Подтягиваем реальный рыночный контекст
+    market_context = load_realtime_market_context()
+    ny_context_task.context = market_context
+
+    # 2) Запускаем Crew
+    result = crew.kickoff()
+
+    # 3) Выводим и логируем
+    print("\n========== FINAL NY SESSION BRIEFING ==========")
     print(result)
-
     save_log(str(result))
+    print("\n[TradingAI] Результат сохранён в reports/ny_session_crew_log.jsonl\n")

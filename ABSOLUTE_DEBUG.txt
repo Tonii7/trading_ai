@@ -1,0 +1,15 @@
+BOT.PY HAS STARTED
+THIS FILE: C:\Users\Win11\Desktop\trading_ai\src\trading_ai\services\discord\bot.py
+PYTHON EXECUTABLE: C:\Users\Win11\venv\Scripts\python.exe
+WORKING DIR: C:\Users\Win11\Desktop\trading_ai
+SYS.PATH:
+ - C:\Users\Win11\Desktop\trading_ai\src\trading_ai\services\discord
+ - C:\Python313\python313.zip
+ - C:\Python313\DLLs
+ - C:\Python313\Lib
+ - C:\Python313
+ - C:\Users\Win11\venv
+ - C:\Users\Win11\venv\Lib\site-packages
+ - C:\Users\Win11\venv\Lib\site-packages\win32
+ - C:\Users\Win11\venv\Lib\site-packages\win32\lib
+ - C:\Users\Win11\venv\Lib\site-packages\Pythonwin
