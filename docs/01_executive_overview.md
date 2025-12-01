@@ -1,4 +1,4 @@
-# Eldar — TradingAI Technical Intelligence Book  
+ TradingAI Technical Intelligence Book  
 ## Section 1 — Executive Overview  
 (Исполнительное резюме системы TradingAI)
 
